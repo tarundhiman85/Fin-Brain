@@ -1,6 +1,7 @@
 # Private Finance Auditor — Phase 1
 
 For the MCP servers and paper execution, see [Phase 2 setup](README_Phase2_MCP.md).
+For the conversation agent and chat endpoint, see [Phase 3 setup](README_Phase3.md).
 
 A single-owner financial retrieval API and virtual portfolio schema.
 Financial text is embedded by local Ollama (nomic-embed-text, 768 dimensions).

@@ -14,6 +14,16 @@ class Settings(BaseSettings):
     ollama_url: str = "http://127.0.0.1:11434"
     embedding_model: str = "nomic-embed-text:latest"
     embedding_dimensions: int = 768
+    agent_llm_base_url: str = "http://127.0.0.1:11434/v1"
+    agent_llm_api_key: SecretStr = SecretStr("local-only")
+    agent_allow_remote_llm: bool = False
+    agent_local_json_mode: bool = True
+    agent_model: str = ""
+    agent_model_timeout_seconds: int = Field(default=60, ge=1, le=300)
+    agent_max_steps: int = Field(default=8, ge=1, le=30)
+    agent_max_tool_calls: int = Field(default=16, ge=1, le=60)
+    agent_max_output_tokens: int = Field(default=2000, ge=256, le=16000)
+    agent_max_context_chars: int = Field(default=100000, ge=10000, le=500000)
     paper_portfolio_id: int = Field(default=1, ge=1)
     max_trade_quote_age_seconds: int = Field(default=1200, ge=1, le=86400)
 

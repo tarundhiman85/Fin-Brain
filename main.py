@@ -21,6 +21,8 @@ from finance_service import (
     FinanceQuery, FinanceSearchError, SearchHit, SearchResponse, search_financial_documents,
 )
 
+from main_agent import router as agent_router
+
 key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
@@ -39,6 +41,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Private Finance Auditor", version="0.1.0", lifespan=lifespan,
               dependencies=[Depends(authenticate)])
+app.include_router(agent_router)
 
 
 @app.exception_handler(SQLAlchemyError)

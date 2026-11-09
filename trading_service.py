@@ -133,13 +133,20 @@ def validate_execution_quote(quote: StockQuote, ticker: str, currency: str) -> N
 
 def apply_fill(session: Session, portfolio: VirtualPortfolio, position: VirtualPosition | None,
                ticker: str, quantity: Decimal, side: str, quote: StockQuote,
-               identifier: UUID) -> dict:
+               identifier: UUID, *, max_buy_price: Decimal | None = None,
+               min_sell_price: Decimal | None = None, max_notional: Decimal | None = None) -> dict:
     """Apply one fill while the caller holds the portfolio's FOR UPDATE lock."""
     validate_execution_quote(quote, ticker, portfolio.currency)
     price = quote.price.quantize(UNIT, rounding=ROUND_HALF_UP)
     notional = (quantity * price).quantize(CENT, rounding=ROUND_HALF_UP)
     if notional < CENT:
         raise TradingError("Trade value must settle to at least 0.01 in the portfolio currency.")
+    if side == "BUY" and max_buy_price is not None and price > max_buy_price:
+        raise TradingError("Fill price exceeds the maximum buy price.")
+    if side == "SELL" and min_sell_price is not None and price < min_sell_price:
+        raise TradingError("Fill price is below the minimum sell price.")
+    if max_notional is not None and notional > max_notional:
+        raise TradingError("Settled notional exceeds the trade budget.")
     now = datetime.now(timezone.utc)
     held = position.shares if position is not None and position.status == "OPEN" else Decimal("0")
     if side == "BUY":
@@ -189,8 +196,19 @@ def apply_fill(session: Session, portfolio: VirtualPortfolio, position: VirtualP
 
 
 def execute_trade(ticker: str, shares: float, order_type: str,
-                  request_id: str | None = None) -> dict:
+                  request_id: str | None = None, *, max_buy_price: Decimal | None = None,
+                  min_sell_price: Decimal | None = None, max_notional: Decimal | None = None) -> dict:
     ticker, quantity, side, identifier = validate_trade(ticker, shares, order_type, request_id)
+    limits = {"max_buy_price": max_buy_price, "min_sell_price": min_sell_price,
+              "max_notional": max_notional}
+    try:
+        limits = {name: Decimal(str(value)) if value is not None else None
+                  for name, value in limits.items()}
+        if any(value is not None and (not value.is_finite() or value <= 0)
+               for value in limits.values()):
+            raise ValueError
+    except (ValueError, InvalidOperation):
+        raise TradingError("Trade limits must be finite positive decimal values.") from None
     portfolio_id = get_settings().paper_portfolio_id
     # A committed retry can succeed even when Yahoo is currently unavailable.
     if request_id is not None:
@@ -217,6 +235,6 @@ def execute_trade(ticker: str, shares: float, order_type: str,
             position = session.scalar(select(VirtualPosition).where(
                 VirtualPosition.portfolio_id == portfolio_id, VirtualPosition.ticker == ticker
             ).with_for_update())
-            receipt = apply_fill(session, portfolio, position, ticker, quantity, side, quote, identifier)
+            receipt = apply_fill(session, portfolio, position, ticker, quantity, side, quote, identifier, **limits)
         # The receipt is returned only after the transaction commits.
         return receipt
