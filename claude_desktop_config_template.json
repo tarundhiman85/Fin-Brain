@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "finbrain-finance-kb": {
+      "command": "C:/ABSOLUTE/PATH/finbrain/.venv/Scripts/python.exe",
+      "args": [
+        "C:/ABSOLUTE/PATH/finbrain/mcp_servers/finance_kb_mcp.py"
+      ],
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      }
+    },
+    "finbrain-market-trading": {
+      "command": "C:/ABSOLUTE/PATH/finbrain/.venv/Scripts/python.exe",
+      "args": [
+        "C:/ABSOLUTE/PATH/finbrain/mcp_servers/market_trading_mcp.py"
+      ],
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      }
+    }
+  }
+}

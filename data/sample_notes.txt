@@ -1,0 +1,9 @@
+Mock household budget, October 2026.
+Monthly grocery target is USD 400. Review recurring subscriptions every quarter.
+Keep an emergency fund covering six months of rent and basic living expenses.
+All transactions in the accompanying sample CSV are fictional and denominated in USD.
+Amounts use a signed convention: negative means outflow, positive means income or refund.
+
+Paper trading plan:
+Start with USD 100,000 of virtual cash. Track positions and orders separately from
+personal spending. No connection to any broker or live trading service exists in Phase 1.
