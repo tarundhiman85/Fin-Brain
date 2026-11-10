@@ -5,6 +5,7 @@ from functools import lru_cache
 import httpx
 
 from config import get_settings
+from llm.local_models import validate_local_model
 
 
 class EmbeddingError(RuntimeError):
@@ -12,8 +13,8 @@ class EmbeddingError(RuntimeError):
 
 
 class OllamaEmbedder:
-    def __init__(self):
-        self.settings = get_settings()
+    def __init__(self, settings=None):
+        self.settings = settings if settings is not None else get_settings()
 
     @property
     def identity(self) -> str:
@@ -34,6 +35,11 @@ class OllamaEmbedder:
         prefix = "search_query: " if query else "search_document: "
         try:
             with httpx.Client(timeout=120, trust_env=False, follow_redirects=False) as client:
+                validate_local_model(self.settings.embedding_model, {})
+                model_info = client.post(
+                    f"{self.settings.ollama_url}/api/show", json={"model": self.settings.embedding_model})
+                model_info.raise_for_status()
+                validate_local_model(self.settings.embedding_model, model_info.json())
                 response = client.post(
                     f"{self.settings.ollama_url}/api/embed",
                     json={"model": self.settings.embedding_model,

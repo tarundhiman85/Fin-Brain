@@ -21,7 +21,9 @@ from finance_service import (
     FinanceQuery, FinanceSearchError, SearchHit, SearchResponse, search_financial_documents,
 )
 
+from main_ui_bridge import configure_ui, router as ui_router
 from main_agent import router as agent_router
+from main_router_middleware import router as llm_router
 
 key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
@@ -42,6 +44,9 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Private Finance Auditor", version="0.1.0", lifespan=lifespan,
               dependencies=[Depends(authenticate)])
 app.include_router(agent_router)
+app.include_router(llm_router)
+app.include_router(ui_router)
+configure_ui(app)
 
 
 @app.exception_handler(SQLAlchemyError)

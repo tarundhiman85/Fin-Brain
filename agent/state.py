@@ -5,7 +5,7 @@ from copy import deepcopy
 from uuid import UUID
 
 import anyio
-from sqlalchemy import text
+from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -42,7 +42,8 @@ class StateStore:
                 # close rolls back the lock transaction before returning to the pool.
                 await anyio.to_thread.run_sync(connection.close)
 
-    def start(self, conversation_id: str, request_id: UUID, message: str, max_history_chars=50000) -> dict:
+    def start(self, conversation_id: str, request_id: UUID, message: str, max_history_chars=50000,
+              request_options=None, initialize=None) -> dict:
         with Session(self.engine) as session, session.begin():
             session.execute(insert(AgentConversation).values(id=conversation_id, history=[])
                             .on_conflict_do_nothing(index_elements=["id"]))
@@ -51,7 +52,12 @@ class StateStore:
             if turn is not None:
                 if turn.conversation_id != conversation_id or turn.message != message:
                     raise ConversationConflict("request_id was used for different chat arguments.")
-                return {"state": deepcopy(turn.state), "response": deepcopy(turn.response)}
+                if turn.state.get("request_options", {}) != (request_options or {}):
+                    raise ConversationConflict("request_id was used with different routing options.")
+                state = deepcopy(turn.state)
+                if turn.response is None and initialize is not None:
+                    initialize(state)
+                return {"state": state, "response": deepcopy(turn.response)}
             if conversation.active_request_id is not None:
                 raise ConversationConflict(
                     f"Resume the unfinished request {conversation.active_request_id} first.")
@@ -63,6 +69,14 @@ class StateStore:
                 "input": deepcopy(history) + [{"role": "user", "content": message}],
                 "steps": [], "pending": [], "rounds": 0,
             }
+            marker = AgentTurn.state["routing"]["conversation_private"].as_boolean()
+            history_private = session.scalar(select(
+                func.bool_or(func.coalesce(marker, True))
+            ).where(AgentTurn.conversation_id == conversation_id))
+            state["history_private"] = bool(history_private) if history_private is not None else bool(history)
+            state["request_options"] = request_options or {}
+            if initialize is not None:
+                initialize(state)  # Policy errors roll back before a new active turn is created.
             session.add(AgentTurn(request_id=request_id, conversation_id=conversation_id,
                                   message=message, state=state))
             conversation.active_request_id = request_id

@@ -12,3 +12,6 @@ yfinance>=1.8,<2
 anyio>=4.10,<5
 openai>=2.54,<3
 jsonschema>=4.20,<5
+anthropic>=0.74,<1
+
+# Phase 5 reuses httpx, Pydantic, OpenAI and Anthropic dependencies above.

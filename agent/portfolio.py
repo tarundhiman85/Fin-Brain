@@ -68,11 +68,15 @@ def portfolio_snapshot() -> dict:
             }
 
 
-async def get_portfolio_metrics() -> dict:
+async def get_portfolio_metrics(include_quotes: bool = True, approved_tickers: set[str] | None = None) -> dict:
     snapshot = await anyio.to_thread.run_sync(portfolio_snapshot)
     limiter = anyio.CapacityLimiter(4)
     async def mark(holding):
         try:
+            if not include_quotes:
+                raise TradingError("External market valuation is disabled for this route.")
+            if approved_tickers is not None and holding["ticker"] not in approved_tickers:
+                raise TradingError("Ticker is outside the approved public market scope.")
             quote = await anyio.to_thread.run_sync(
                 lambda: fetch_stock_quote(holding["ticker"]), limiter=limiter)
             if quote.currency != snapshot["currency"] or quote.ticker != holding["ticker"]:

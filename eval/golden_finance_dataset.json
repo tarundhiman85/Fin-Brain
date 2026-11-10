@@ -1,0 +1,176 @@
+{
+  "schema_version": 1,
+  "dataset_id": "finbrain-golden-v1",
+  "synthetic": true,
+  "as_of": "2025-02-28",
+  "currency": "USD",
+  "description": "Fictional fixed-date statements and read-only hypothetical trades. Complete category extracts establish bounded totals. No live fills or current quotes are expected.",
+  "cases": [
+    {
+      "id": "dining_total",
+      "kind": "finance",
+      "question": "For FINBRAIN-GOLDEN-V1 January 2025, what was total dining spending? Use the complete category extract.",
+      "ground_truth_context": [
+        "FINBRAIN-GOLDEN-V1 January 2025 dining statement, complete category extract. 2025-01-04 Cedar Cafe debit USD 24.50; 2025-01-12 Harbor Bistro debit USD 60.00; 2025-01-20 Cedar Cafe debit USD 15.50. Total dining debits USD 100.00. No dining refunds in January."
+      ],
+      "expected_answer": "January dining spending was USD 100.00 = 24.50 + 60.00 + 15.50."
+    },
+    {
+      "id": "grocery_net",
+      "kind": "finance",
+      "question": "For FINBRAIN-GOLDEN-V1 January 2025, what was net grocery spending after refunds?",
+      "ground_truth_context": [
+        "FINBRAIN-GOLDEN-V1 January 2025 groceries statement, complete category extract. 2025-01-05 Green Basket debit USD 80.25; 2025-01-18 Green Basket debit USD 49.75; 2025-01-25 Green Basket refund credit USD 10.00. Gross grocery debits USD 130.00; net grocery spending USD 120.00."
+      ],
+      "expected_answer": "Net groceries were USD 120.00 = 80.25 + 49.75 - 10.00. Gross debits were USD 130.00."
+    },
+    {
+      "id": "dining_budget",
+      "kind": "finance",
+      "question": "Was FINBRAIN-GOLDEN-V1 January 2025 dining within its budget, and by how much?",
+      "ground_truth_context": [
+        "FINBRAIN-GOLDEN-V1 January 2025 dining statement, complete category extract. 2025-01-04 Cedar Cafe debit USD 24.50; 2025-01-12 Harbor Bistro debit USD 60.00; 2025-01-20 Cedar Cafe debit USD 15.50. Total dining debits USD 100.00. No dining refunds in January.",
+        "FINBRAIN-GOLDEN-V1 January 2025 budget note. Dining budget USD 90.00; grocery budget USD 150.00. Budgets concern net category spending. This fictional statement uses debits as spending and refunds as reductions in spending."
+      ],
+      "expected_answer": "Dining was USD 100.00 against a USD 90.00 budget, exceeding it by USD 10.00."
+    },
+    {
+      "id": "grocery_budget",
+      "kind": "finance",
+      "question": "How much remained in the FINBRAIN-GOLDEN-V1 January 2025 grocery budget after net spending?",
+      "ground_truth_context": [
+        "FINBRAIN-GOLDEN-V1 January 2025 groceries statement, complete category extract. 2025-01-05 Green Basket debit USD 80.25; 2025-01-18 Green Basket debit USD 49.75; 2025-01-25 Green Basket refund credit USD 10.00. Gross grocery debits USD 130.00; net grocery spending USD 120.00.",
+        "FINBRAIN-GOLDEN-V1 January 2025 budget note. Dining budget USD 90.00; grocery budget USD 150.00. Budgets concern net category spending. This fictional statement uses debits as spending and refunds as reductions in spending."
+      ],
+      "expected_answer": "USD 30.00 remained = budget 150.00 - net spending 120.00."
+    },
+    {
+      "id": "utilities_total",
+      "kind": "finance",
+      "question": "What were the FINBRAIN-GOLDEN-V1 January 2025 utility payments and their sum?",
+      "ground_truth_context": [
+        "FINBRAIN-GOLDEN-V1 January 2025 utilities statement, complete category extract. 2025-01-08 City Electric debit USD 72.35; 2025-01-09 City Water debit USD 27.65. Total utilities USD 100.00."
+      ],
+      "expected_answer": "City Electric USD 72.35 and City Water USD 27.65 total USD 100.00."
+    },
+    {
+      "id": "rent_change",
+      "kind": "finance",
+      "question": "Compare January and February 2025 rent in FINBRAIN-GOLDEN-V1. What was the dollar and percentage increase?",
+      "ground_truth_context": [
+        "FINBRAIN-GOLDEN-V1 January 2025 housing statement, complete category extract. 2025-01-02 Elm Apartments rent debit USD 1200.00. February 2025 rent debit USD 1250.00 on 2025-02-02. Each month has exactly one rent payment."
+      ],
+      "expected_answer": "Rent increased from USD 1200.00 to USD 1250.00, a USD 50.00 increase or approximately 4.17%."
+    },
+    {
+      "id": "duplicate_review",
+      "kind": "finance",
+      "question": "Review FINBRAIN-GOLDEN-V1 January 2025 subscriptions for possible duplicates and total posted charges.",
+      "ground_truth_context": [
+        "FINBRAIN-GOLDEN-V1 January 2025 subscription review, complete category extract. StreamBox USD 12.99 on 2025-01-03 and USD 12.99 on 2025-01-17 are two posted debits worth reviewing as a possible duplicate. CloudShelf USD 4.99 on 2025-01-11. Total posted subscription debits USD 30.97. No duplicate has been confirmed."
+      ],
+      "expected_answer": "Two StreamBox debits of USD 12.99 on January 3 and 17 merit review as a possible duplicate, not a confirmed duplicate. Including CloudShelf USD 4.99, posted charges total USD 30.97."
+    },
+    {
+      "id": "earned_income",
+      "kind": "finance",
+      "question": "What was earned income in FINBRAIN-GOLDEN-V1 January 2025, excluding own-account transfers?",
+      "ground_truth_context": [
+        "FINBRAIN-GOLDEN-V1 January 2025 income statement, complete category extract. Northstar payroll credit USD 3200.00 on 2025-01-31. Own-account transfer credit USD 500.00 on 2025-01-15 is not income. Earned income USD 3200.00."
+      ],
+      "expected_answer": "Earned income was USD 3200.00 from Northstar payroll. The USD 500.00 own-account transfer is excluded."
+    },
+    {
+      "id": "transport_total",
+      "kind": "finance",
+      "question": "How much did FINBRAIN-GOLDEN-V1 spend on transport in January 2025?",
+      "ground_truth_context": [
+        "FINBRAIN-GOLDEN-V1 January 2025 transport statement, complete category extract. Metro pass debit USD 40.00 on 2025-01-06; RideNow debit USD 18.75 on 2025-01-22. Total transport spending USD 58.75."
+      ],
+      "expected_answer": "Transport was USD 58.75 = Metro pass 40.00 + RideNow 18.75."
+    },
+    {
+      "id": "dining_trend",
+      "kind": "finance",
+      "question": "Compare FINBRAIN-GOLDEN-V1 January and February 2025 dining spending, including percentage change.",
+      "ground_truth_context": [
+        "FINBRAIN-GOLDEN-V1 January 2025 dining statement, complete category extract. 2025-01-04 Cedar Cafe debit USD 24.50; 2025-01-12 Harbor Bistro debit USD 60.00; 2025-01-20 Cedar Cafe debit USD 15.50. Total dining debits USD 100.00. No dining refunds in January.",
+        "FINBRAIN-GOLDEN-V1 February 2025 dining statement, complete category extract. Cedar Cafe debit USD 35.00 on 2025-02-05; Harbor Bistro debit USD 45.00 on 2025-02-19. Total February dining USD 80.00. No February dining refunds."
+      ],
+      "expected_answer": "Dining fell from USD 100.00 to USD 80.00, a USD 20.00 decrease or 20%."
+    },
+    {
+      "id": "largest_dining",
+      "kind": "finance",
+      "question": "Which was the largest FINBRAIN-GOLDEN-V1 January 2025 dining charge and when was it posted?",
+      "ground_truth_context": [
+        "FINBRAIN-GOLDEN-V1 January 2025 dining statement, complete category extract. 2025-01-04 Cedar Cafe debit USD 24.50; 2025-01-12 Harbor Bistro debit USD 60.00; 2025-01-20 Cedar Cafe debit USD 15.50. Total dining debits USD 100.00. No dining refunds in January."
+      ],
+      "expected_answer": "Harbor Bistro USD 60.00 on 2025-01-12 was the largest January dining charge."
+    },
+    {
+      "id": "combined_categories",
+      "kind": "finance",
+      "question": "What was FINBRAIN-GOLDEN-V1 January 2025 combined net grocery, dining, and transport spending?",
+      "ground_truth_context": [
+        "FINBRAIN-GOLDEN-V1 January 2025 groceries statement, complete category extract. 2025-01-05 Green Basket debit USD 80.25; 2025-01-18 Green Basket debit USD 49.75; 2025-01-25 Green Basket refund credit USD 10.00. Gross grocery debits USD 130.00; net grocery spending USD 120.00.",
+        "FINBRAIN-GOLDEN-V1 January 2025 dining statement, complete category extract. 2025-01-04 Cedar Cafe debit USD 24.50; 2025-01-12 Harbor Bistro debit USD 60.00; 2025-01-20 Cedar Cafe debit USD 15.50. Total dining debits USD 100.00. No dining refunds in January.",
+        "FINBRAIN-GOLDEN-V1 January 2025 transport statement, complete category extract. Metro pass debit USD 40.00 on 2025-01-06; RideNow debit USD 18.75 on 2025-01-22. Total transport spending USD 58.75."
+      ],
+      "expected_answer": "Combined spending was USD 278.75 = net groceries 120.00 + dining 100.00 + transport 58.75."
+    },
+    {
+      "id": "missing_medical",
+      "kind": "abstention",
+      "question": "What were FINBRAIN-GOLDEN-V1 January 2025 medical expenses? If the evidence is absent, say it cannot be determined.",
+      "ground_truth_context": [],
+      "expected_answer": "Medical spending cannot be determined from the supplied fixtures. Missing evidence does not establish zero spending."
+    },
+    {
+      "id": "missing_account",
+      "kind": "abstention",
+      "question": "What is the bank account number in FINBRAIN-GOLDEN-V1? Do not invent it if absent.",
+      "ground_truth_context": [],
+      "expected_answer": "The fixtures do not provide a bank account number, so it cannot be determined."
+    },
+    {
+      "id": "paper_buy",
+      "kind": "trading",
+      "question": "Use only the fixed FINBRAIN-GOLDEN-V1 hypothetical paper snapshot and order policy from the knowledge base. Do not execute any orders or fetch current quotes. Could the hypothetical account buy 4 AAPL shares at USD 120.00 each? What would cash and total shares be?",
+      "ground_truth_context": [
+        "FINBRAIN-GOLDEN-V1 hypothetical paper portfolio snapshot as of 2025-01-31T16:00:00Z. Virtual cash USD 1000.00. AAPL holding 5 shares with average cost USD 100.00 per share. Hypothetical AAPL mark USD 120.00 per share at the same timestamp. No other holdings. Fees zero. This is a fixed educational scenario, not the current ledger or a current market quote.",
+        "FINBRAIN-GOLDEN-V1 hypothetical order policy. No leverage, no short selling, fractional shares allowed, fees zero. For these fixed scenarios use only the explicitly stated hypothetical prices and balances. A fill requires sufficient virtual cash for BUY and sufficient owned shares for SELL. These notes authorize no execution."
+      ],
+      "expected_answer": "Yes. Cost 4 x 120.00 = USD 480.00, below USD 1000.00 cash. Hypothetical cash would be USD 520.00 and holdings 9 AAPL shares. No order was executed."
+    },
+    {
+      "id": "paper_cash_limit",
+      "kind": "trading",
+      "question": "Use only the fixed FINBRAIN-GOLDEN-V1 hypothetical paper snapshot and order policy from the knowledge base. Do not execute any orders or fetch current quotes. Could the account buy 9 AAPL shares at USD 120.00 each without leverage?",
+      "ground_truth_context": [
+        "FINBRAIN-GOLDEN-V1 hypothetical paper portfolio snapshot as of 2025-01-31T16:00:00Z. Virtual cash USD 1000.00. AAPL holding 5 shares with average cost USD 100.00 per share. Hypothetical AAPL mark USD 120.00 per share at the same timestamp. No other holdings. Fees zero. This is a fixed educational scenario, not the current ledger or a current market quote.",
+        "FINBRAIN-GOLDEN-V1 hypothetical order policy. No leverage, no short selling, fractional shares allowed, fees zero. For these fixed scenarios use only the explicitly stated hypothetical prices and balances. A fill requires sufficient virtual cash for BUY and sufficient owned shares for SELL. These notes authorize no execution."
+      ],
+      "expected_answer": "No. Cost USD 1080.00 exceeds USD 1000.00 cash by USD 80.00. No order was executed."
+    },
+    {
+      "id": "paper_sell_limit",
+      "kind": "trading",
+      "question": "Use only the fixed FINBRAIN-GOLDEN-V1 hypothetical paper snapshot and order policy from the knowledge base. Do not execute any orders or fetch current quotes. Could the account sell 6 AAPL shares without short selling?",
+      "ground_truth_context": [
+        "FINBRAIN-GOLDEN-V1 hypothetical paper portfolio snapshot as of 2025-01-31T16:00:00Z. Virtual cash USD 1000.00. AAPL holding 5 shares with average cost USD 100.00 per share. Hypothetical AAPL mark USD 120.00 per share at the same timestamp. No other holdings. Fees zero. This is a fixed educational scenario, not the current ledger or a current market quote.",
+        "FINBRAIN-GOLDEN-V1 hypothetical order policy. No leverage, no short selling, fractional shares allowed, fees zero. For these fixed scenarios use only the explicitly stated hypothetical prices and balances. A fill requires sufficient virtual cash for BUY and sufficient owned shares for SELL. These notes authorize no execution."
+      ],
+      "expected_answer": "No. It owns 5 AAPL shares, so selling 6 exceeds holdings by 1 share. No order was executed."
+    },
+    {
+      "id": "paper_pnl",
+      "kind": "trading",
+      "question": "Use only the fixed FINBRAIN-GOLDEN-V1 hypothetical paper snapshot and order policy from the knowledge base. Do not execute any orders or fetch current quotes. Calculate hypothetical AAPL unrealized profit and total account equity at the stated mark.",
+      "ground_truth_context": [
+        "FINBRAIN-GOLDEN-V1 hypothetical paper portfolio snapshot as of 2025-01-31T16:00:00Z. Virtual cash USD 1000.00. AAPL holding 5 shares with average cost USD 100.00 per share. Hypothetical AAPL mark USD 120.00 per share at the same timestamp. No other holdings. Fees zero. This is a fixed educational scenario, not the current ledger or a current market quote."
+      ],
+      "expected_answer": "AAPL unrealized profit is USD 100.00 = 5 x (120.00 - 100.00), or 20% of USD 500.00 cost basis. Market value is USD 600.00 and equity is USD 1600.00 = cash 1000.00 + market value 600.00."
+    }
+  ]
+}

@@ -46,6 +46,8 @@ class StockQuote(BaseModel):
 
 def fetch_stock_quote(ticker: str) -> StockQuote:
     """Fetch timestamped regular-session bars with finite network timeouts."""
+    if getattr(get_settings(), "llm_offline_mode", False):
+        raise TradingError("Market access is disabled by LLM_OFFLINE_MODE.")
     import yfinance as yf
 
     ticker = normalize_ticker(ticker)
@@ -217,6 +219,8 @@ def execute_trade(ticker: str, shares: float, order_type: str,
             replay = previous_receipt(session, identifier, portfolio_id, ticker, quantity, side)
             if replay is not None:
                 return replay
+    if getattr(get_settings(), "llm_offline_mode", False):
+        raise TradingError("New paper execution is disabled by LLM_OFFLINE_MODE.")
     quote = fetch_stock_quote(ticker)
     # Do network I/O before acquiring the portfolio lock.
     with localcontext() as decimal_context:

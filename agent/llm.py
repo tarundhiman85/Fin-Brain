@@ -27,6 +27,7 @@ class ModelReply:
     items: list[dict]
     calls: list[dict]
     text: str
+    model_name: str | None = None
 
 
 def local_context(messages: list[dict]) -> dict:
@@ -102,7 +103,7 @@ class ToolCallingModel:
             calls = [item for item in items if item["type"] == "function_call"]
             if any(item["type"] not in {"function_call", "message", "reasoning"} for item in items):
                 raise ModelFailure("The model returned an unsupported action.")
-            return ModelReply(items=items, calls=calls, text=response.output_text or "")
+            return ModelReply(items=items, calls=calls, text=response.output_text or "", model_name=settings.agent_model)
         except ModelFailure:
             raise
         except Exception:
@@ -153,7 +154,7 @@ class ToolCallingModel:
         Draft202012Validator(schema).validate(decision)
         if decision["tool"] == "final":
             text = decision["answer"]
-            return ModelReply(items=[{"role": "assistant", "content": text}], calls=[], text=text)
+            return ModelReply(items=[{"role": "assistant", "content": text}], calls=[], text=text, model_name=self.settings.agent_model)
         item = {"type": "function_call", "call_id": "local_" + uuid4().hex,
                 "name": decision["tool"], "arguments": json.dumps(decision["arguments"])}
-        return ModelReply(items=[item], calls=[item], text="")
+        return ModelReply(items=[item], calls=[item], text="", model_name=self.settings.agent_model)

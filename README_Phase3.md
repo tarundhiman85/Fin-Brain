@@ -1,5 +1,8 @@
 # Phase 3 — Orchestrating Agent and Paper Trading Loop
 
+Phase 4 supersedes provider selection with LLM_CLOUD_* settings and per-request
+routing modes. Follow [Phase 4 configuration](README_Phase4.md) for cloud setup.
+
 The authenticated POST /api/v1/agent/chat endpoint runs a custom asynchronous
 model/tool/observation/synthesis loop. It combines financial retrieval, market
 quotes, virtual cash/holdings checks, and paper execution.

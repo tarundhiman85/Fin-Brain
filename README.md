@@ -2,6 +2,7 @@
 
 For the MCP servers and paper execution, see [Phase 2 setup](README_Phase2_MCP.md).
 For the conversation agent and chat endpoint, see [Phase 3 setup](README_Phase3.md).
+For current model configuration and privacy controls, see [Phase 4 routing](README_Phase4.md).
 
 A single-owner financial retrieval API and virtual portfolio schema.
 Financial text is embedded by local Ollama (nomic-embed-text, 768 dimensions).
@@ -224,3 +225,7 @@ database volume. Back up data before any destructive volume operations.
 
 References: [pgvector SQLAlchemy integration](https://github.com/pgvector/pgvector-python#sqlalchemy),
 [Ollama embedding API](https://docs.ollama.com/api/embed).
+
+Phase 5 evaluation setup and metrics are documented in [README_Phase5.md](README_Phase5.md).
+
+Phase 6 local chat and trading dashboard setup is documented in [README_Phase6_UI.md](README_Phase6_UI.md).

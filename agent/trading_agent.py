@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from agent.llm import ModelFailure, reject_nonfinite
 from agent.state import StateStore
 from agent.tools_registry import ToolsRegistry
+from llm.schemas import PublicMarketContext, RoutingMode
 
 INSTRUCTIONS = """
 You are the owner's private expense auditor and virtual paper-trading assistant.
@@ -49,6 +50,12 @@ class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=8000)
     conversation_id: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_.:-]+$")
     request_id: UUID = Field(default_factory=uuid4)
+    routing_mode: RoutingMode | None = None
+    public_market_context: PublicMarketContext | None = None
+
+    def routing_options(self):
+        return self.model_dump(mode="json", include={"routing_mode", "public_market_context"},
+                               exclude_none=True)
 
     @field_validator("message")
     @classmethod
@@ -80,6 +87,8 @@ class ChatResponse(BaseModel):
     portfolio: dict | None
     portfolio_error: str | None = None
     replayed: bool = False
+    routing: dict | None = None
+    routing_events: list[dict] = Field(default_factory=list)
 
 
 def render_trade_summary(steps: list[dict], portfolio: dict | None, explanation: str = "") -> str:
@@ -133,15 +142,23 @@ class TradingAgent:
         await anyio.to_thread.run_sync(partial(self.store.save, request.request_id, state))
 
     async def chat(self, request: ChatRequest) -> ChatResponse:
+        options = {}
+        initializer = getattr(self.model, "initialize_state", None)
+        if initializer is not None or request.routing_options():
+            options = {"request_options": request.routing_options(),
+                       "initialize": partial(initializer, request) if initializer else None}
         async with agent_limit, self.store.lock(request.conversation_id):
             saved = await anyio.to_thread.run_sync(partial(
                 self.store.start, request.conversation_id, request.request_id, request.message,
-                self.settings.agent_max_context_chars // 2))
+                self.settings.agent_max_context_chars // 2, **options))
             if saved["response"] is not None:
                 return ChatResponse.model_validate(dict(saved["response"], replayed=True))
             state = saved["state"]
             state.setdefault("started_at", now())
             await self.checkpoint(request, state)
+            if hasattr(self.model, "for_turn"):
+                executor = self.model.for_turn(request, state, self.registry, self.store)
+                return await executor.run(request, state)
             return await self.run(request, state)
 
     async def run(self, request: ChatRequest, state: dict) -> ChatResponse:
@@ -212,6 +229,7 @@ class TradingAgent:
             status=status, answer=answer, steps=state["steps"],
             started_at=state["started_at"], completed_at=now(),
             portfolio=portfolio, portfolio_error=portfolio_error,
+            routing=state.get("routing"), routing_events=state.get("routing_events", []),
         )
         await anyio.to_thread.run_sync(partial(
             self.store.finish, request.request_id, state, response.model_dump(mode="json")))

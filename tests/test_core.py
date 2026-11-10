@@ -100,6 +100,8 @@ def test_disallows_remote_embedding_hosts():
 def test_embedding_prefix_and_vector_validation(monkeypatch):
     seen = []
     def handler(request):
+        if request.url.path == "/api/show":
+            return httpx.Response(200, json={"capabilities": ["embedding"]})
         import json
         seen.append(json.loads(request.content))
         return httpx.Response(200, json={"embeddings": [[1.0] + [0.0] * 767]})
@@ -115,7 +117,7 @@ def test_rejects_wrong_embedding_dimension(monkeypatch):
     real_client = httpx.Client
     monkeypatch.setattr(httpx, "Client", lambda **kwargs: real_client(
         transport=httpx.MockTransport(lambda request:
-            httpx.Response(200, json={"embeddings": [[1.0, 2.0]]})), **kwargs))
+            httpx.Response(200, json={} if request.url.path == "/api/show" else {"embeddings": [[1.0, 2.0]]})), **kwargs))
     with pytest.raises(EmbeddingError):
         OllamaEmbedder().embed(["food"])
 
