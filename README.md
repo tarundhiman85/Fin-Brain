@@ -1,231 +1,292 @@
-# Private Finance Auditor — Phase 1
+# FinBrain
 
-For the MCP servers and paper execution, see [Phase 2 setup](README_Phase2_MCP.md).
-For the conversation agent and chat endpoint, see [Phase 3 setup](README_Phase3.md).
-For current model configuration and privacy controls, see [Phase 4 routing](README_Phase4.md).
+FinBrain is a self-hosted personal finance assistant and paper trading workspace.
+Chat with your financial records, inspect source citations and tool activity,
+and test stock trades with virtual money. A new portfolio starts with
+**$100,000 in virtual cash**.
 
-A single-owner financial retrieval API and virtual portfolio schema.
-Financial text is embedded by local Ollama (nomic-embed-text, 768 dimensions).
-PostgreSQL stores text, JSONB metadata, and vectors with a cosine HNSW index.
-Paper portfolios start with **USD 100,000.00**, and position/order tables support
-fractional shares. Money uses PostgreSQL NUMERIC and Python Decimal.
+The dashboard includes balances and P&L, timestamped orders, stock quotes,
+candlestick/volume charts, SMA 50/200 and RSI 14.
 
-This phase provides retrieval and a read-only portfolio ledger. Order execution,
-fills, cash settlement, brokerage integrations, market prices, and generated RAG
-answers are future phases. No order placement API exists. Holdings include cost
-basis, not current market value or trading performance.
+## Simple architecture
 
-## 1. Prerequisites and secrets
+```mermaid
+flowchart LR
+    UI[Next.js browser UI] -->|API key / REST / SSE| API[FastAPI]
+    API --> AGENT[Agent and privacy router]
+    AGENT --> TOOLS[MCP tools and portfolio services]
+    AGENT --> OLLAMA[Local Ollama models]
+    AGENT -. Optional public market reasoning .-> CLOUD[OpenAI or Anthropic]
+    TOOLS --> DB[(PostgreSQL + pgvector)]
+    TOOLS --> YAHOO[Yahoo data through yfinance]
+    FILES[CSV statements and notes] --> INGEST[Ingestion script]
+    INGEST -->|Local embeddings| OLLAMA
+    INGEST --> DB
+```
 
-Install Python 3.11+, Docker with a running Linux-container engine, and Ollama.
-On Windows, start Docker Desktop before the following commands.
+- **Next.js** displays chat, live tool checkpoints, sources and the dashboard.
+- **FastAPI** authenticates requests and coordinates the agent and services.
+- **Ollama** generates local answers and financial document embeddings.
+- **PostgreSQL** stores financial chunks, conversations and the virtual ledger.
+- **yfinance** supplies stock quotes and daily price history.
+- **Optional cloud models** receive approved public market context when enabled.
 
-This repository may be in a OneDrive directory. For private financial records,
-move the project and its .env outside cloud-synced folders before using real
-data. Git ignores do not prevent OneDrive synchronization.
+Personal financial context uses local inference. Paper orders update cash,
+positions and receipts atomically in PostgreSQL.
 
-Create a virtual environment (PowerShell):
+## Which key goes where?
 
-~~~powershell
-py -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe setup_env.py
-~~~
+| Setting | Location | Purpose |
+| --- | --- | --- |
+| `API_KEY` | Root `.env`, then paste the same value into the browser sidebar | Access to your FinBrain backend |
+| `POSTGRES_PASSWORD` | Root `.env` | Database administrator password |
+| `APP_DB_PASSWORD` | Root `.env` | Application database password |
+| `LLM_CLOUD_API_KEY` | Root `.env`, optional | OpenAI or Anthropic cloud reasoning |
+| `NEXT_PUBLIC_API_BASE_URL` | `frontend/.env.local` | Backend address, normally `http://127.0.0.1:8000` |
 
-On macOS/Linux use python3 -m venv .venv and .venv/bin/python in place of
-.\.venv\Scripts\python.exe.
+The setup script generates the FinBrain key and database passwords. Ollama and
+the current yfinance integration require no personal provider API key. Cloud
+provider keys stay in the backend environment. The browser retains the FinBrain
+key in tab memory.
 
-setup_env.py generates independent random admin, application, and API secrets.
-It refuses to overwrite an existing .env. Generated hexadecimal database
-passwords are safe in connection URLs. If setting your own passwords, URL-encode
-reserved characters in DATABASE_URL; the Compose API URL expects URL-safe
-APP_DB_PASSWORD. .env.example documents settings; never commit .env.
+## Run the project
 
-## 2. Start PostgreSQL
+You need Docker Desktop with its Linux engine running, Python 3.11+, Node.js 22+
+and Ollama. These PowerShell instructions run the Python backend in Docker and
+the Next.js frontend on your laptop. Run commands from the repository root
+unless a step changes directories.
 
-~~~powershell
-docker compose up -d --wait postgres
-~~~
+### 1. Get the code and create configuration
 
-The first volume initialization enables vector and creates finance_app
-with schema privileges but no superuser/role/database-creation powers.
-The admin credentials are used only for initialization/administration. Data
-persists in the postgres_data named volume. Port 5432 is bound to loopback.
+```powershell
+git clone https://github.com/tarundhiman85/Fin-Brain.git
+cd Fin-Brain
+py setup_env.py
+```
 
-If a volume already exists, Docker's initialization scripts do not rerun.
-Changing .env passwords does not rotate existing database roles. Rotate roles
-with an administrative connection and update .env together; do not delete a
-volume containing real data to resolve a password mismatch.
+If you already have the repository, open its existing folder. Run `setup_env.py`
+only when creating a new `.env`; it refuses to overwrite an existing file.
+On systems without the Windows Python launcher, use `python3 setup_env.py`.
 
-## 3. Prepare the local embedding model
+### 2. Prepare local AI models
 
-~~~powershell
+Start Ollama, then download the embedding and chat models.
+
+```powershell
 ollama pull nomic-embed-text:latest
-ollama list
-~~~
+ollama pull qwen2.5-coder:7b
+```
 
-Ollama must be running at http://127.0.0.1:11434. If necessary start it with
-ollama serve in a separate terminal. Model/image/package downloads require
-internet access; financial text is processed locally after setup. The application
-does not call a cloud embedding or LLM provider, follow embedding HTTP redirects,
-or use environment-configured HTTP proxies.
+Create a local alias with a 16K context window for multi-step tool calls.
 
-The model name/tag must match EMBEDDING_MODEL. Database initialization records
-the local model digest, 768 dimensions, and retrieval-prefix convention.
-Ingestion and search reject a different model digest. Keep model artifacts stable
-while the service runs. For a model upgrade, use a fresh database, initialize it
-with the new model, and reingest original sources before switching databases.
-create_all is initial bootstrap, not a schema migration system; future schema
-changes should use versioned migrations.
+```powershell
+New-Item -ItemType Directory -Force data/private | Out-Null
+$modelConfig = @('FROM qwen2.5-coder:7b', 'PARAMETER num_ctx 16384')
+$modelConfig | Set-Content -Encoding utf8 data/private/FinBrain.Modelfile
+ollama create finbrain-local -f data/private/FinBrain.Modelfile
+```
 
-## 4. Initialize schema and ingest mock data
+Edit these values in the root `.env`.
 
-~~~powershell
-.\.venv\Scripts\python.exe database.py
-.\.venv\Scripts\python.exe ingest_finance.py --csv data/sample_transactions.csv --notes data/sample_notes.txt
-~~~
+```dotenv
+LLM_LOCAL_MODEL=finbrain-local:latest
+LLM_ROUTING_MODE=auto
+LLM_CLOUD_ENABLED=false
+LLM_OFFLINE_MODE=false
+EMBEDDING_MODEL=nomic-embed-text:latest
+```
 
-The sample includes 10 fictional USD transactions and one short financial note.
-Re-running the same command skips already imported chunks.
+Keep Ollama running. If its desktop service is not active, start `ollama serve`
+in another terminal. The Docker API connects to the host Ollama service through
+`host.docker.internal:11434` on Docker Desktop.
 
-CSV contract:
+`LLM_OFFLINE_MODE=false` enables market data and new paper orders. Setting it to
+`true` allows local financial queries and ledger reads while disabling market
+access. For Ollama's own cloud-disable settings, see the [routing guide](README_Phase4.md).
 
-- UTF-8 (optional BOM); columns Date,Description,Amount,Category.
-- ISO dates (YYYY-MM-DD), plain signed decimal amounts, at most two decimal places.
-- Negative amounts represent outflows; positive amounts represent income/refunds.
-- Quote descriptions containing commas. Thousands separators, currency symbols,
-  and bank-specific date formats must be normalized before import.
-- Amount metadata is a decimal string; no money is converted through float.
-- Use --source-type credit_card for credit-card exports.
-- Repeat --csv and --notes for multiple files. Notes are UTF-8 text.
+### 3. Initialize the database and load sample data
 
-CSV rows remain atomic transaction chunks; notes use overlapping character
-chunks. Ollama rejects oversized inputs instead of silently truncating them.
-Import validation/embedding/SQL failures roll back the entire import; only
-record counts are printed.
-
-Deduplication keys include absolute input path, row/chunk offset, content, and
-metadata. This preserves identical legitimate transactions at different rows.
-Moving a file or editing/reordering it can produce new records; importing a
-revised statement is append-only and does not reconcile or delete old rows.
-
-Keep real files in data/private/ (ignored by Git and the Docker build). The CLI
-loads parsed input in memory and writes in embedding batches of 32; very large
-exports should be split into manageable files.
-
-## 5. Run the API
-
-~~~powershell
-.\.venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8000 --no-access-log
-~~~
-
-Open http://127.0.0.1:8000/docs, click **Authorize**, and enter API_KEY from .env.
-Both data endpoints require X-API-Key; the Swagger shell/schema are public.
-Settings are read at process startup; restart after changing secrets.
-
-PowerShell examples (run in a separate terminal):
-
-~~~powershell
-$apiKeyLine = Get-Content .env | Where-Object { $_ -match '^API_KEY=' }
-$headers = @{ "X-API-Key" = $apiKeyLine.Substring(8) }
-Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/api/v1/finance/query -Headers $headers -ContentType application/json -Body '{"query":"What grocery purchases did I make?","top_k":5}'
-Invoke-RestMethod -Uri http://127.0.0.1:8000/api/v1/trading/portfolio -Headers $headers
-~~~
-
-Equivalent curl commands in Bash (set API_KEY to your generated value first):
-
-~~~bash
-curl --fail-with-body http://127.0.0.1:8000/api/v1/finance/query \
-  -H "X-API-Key: $API_KEY" -H 'Content-Type: application/json' \
-  -d '{"query":"What grocery purchases did I make?","top_k":5}'
-
-curl --fail-with-body http://127.0.0.1:8000/api/v1/trading/portfolio \
-  -H "X-API-Key: $API_KEY"
-~~~
-
-Search returns {"results":[{"id":"...","content":"...","metadata":{},"similarity":0.8}]}.
-Similarity is 1 - cosine_distance in [-1, 1], not a probability. HNSW provides
-approximate nearest neighbors. top_k is 1–50; queries are 1–2000 characters.
-An empty index returns an empty list. Semantic search cannot reliably compute
-totals or exhaustive audits; use SQL aggregates for financial calculations.
-
-Portfolio response starts with:
-
-~~~json
-{
-  "id": 1,
-  "currency": "USD",
-  "cash_balance": "100000.00",
-  "holdings_cost_basis": "0",
-  "updated_at": "2026-11-09T00:00:00Z",
-  "holdings": []
-}
-~~~
-
-The timestamp above is illustrative. Decimal fields serialize as strings to
-preserve precision. ?portfolio_id=2 selects a different existing portfolio;
-missing portfolios return 404. No fake holdings are seeded.
-
-## Optional: API and CLI in Docker
-
-After generating .env, starting PostgreSQL, and pulling the host Ollama model:
-
-~~~powershell
+```powershell
+docker compose up -d --wait postgres
 docker compose --profile app build api
 docker compose --profile app run --rm api python database.py
+docker compose --profile app run --rm api python upgrade_phase2.py
+docker compose --profile app run --rm api python upgrade_phase3.py
 docker compose --profile app run --rm api python ingest_finance.py --csv data/sample_transactions.csv --notes data/sample_notes.txt
+```
+
+The database persists in the Compose `postgres_data` volume. Initialization
+creates the application database role, enables pgvector and seeds the virtual
+portfolio. The sample transactions and notes are fictional. Repeating an
+unchanged import skips existing chunks.
+
+For an existing database, retain its configured embedding model identity.
+Changing `.env` database passwords does not rotate existing database roles.
+
+### 4. Start the backend
+
+```powershell
 docker compose --profile app up -d api
-~~~
+docker compose --profile app ps
+```
 
-The API uses postgres:5432 and host.docker.internal:11434 inside Docker,
-and remains exposed only on host loopback port 8000. Docker Desktop normally
-provides host-service routing. On native Linux, the host gateway may not reach a
-loopback-only Ollama listener. Prefer the host Python workflow in that case;
-do not expose Ollama publicly. Private input files are intentionally excluded
-from images; use the host CLI or a narrowly scoped read-only bind mount.
+Open **http://127.0.0.1:8000/docs** to inspect the API. Click **Authorize** and
+enter `API_KEY` from your root `.env` to test protected routes.
 
-## Tests and verification
+### 5. Start the frontend
 
-~~~powershell
-.\.venv\Scripts\python.exe -m pytest -q
-~~~
+Open a second terminal in the repository root.
 
-Tests cover authentication, request limits, Decimal parsing, duplicate-row
-identity, note boundaries, vector validation, and PostgreSQL schema compilation.
-They use mocked local embeddings and database sessions without downloading models.
+```powershell
+cd frontend
+Copy-Item .env.example .env.local
+npm ci
+npm run dev
+```
 
-For the optional real database smoke test, initialize a disposable test database
-as above, set TEST_DATABASE_URL to its SQLAlchemy connection URL, and rerun pytest.
-That test checks actual vector cosine search, conflict handling, and cash
-constraints inside a transaction that is rolled back.
+Copy the frontend environment template only when creating `.env.local`.
+Open **http://127.0.0.1:3000**, paste the root `.env` value of `API_KEY` into the
+sidebar, and click **Connect securely**.
 
-Initial workspace validation: 18 tests passed; the real database test was skipped
-because Docker's engine was unavailable. Live PostgreSQL/Ollama ingestion and the
-Docker image still require a running local environment.
+The default browser origins are localhost and 127.0.0.1 on port 3000. For other
+ports, update frontend `NEXT_PUBLIC_API_BASE_URL` and backend `UI_ORIGINS`, then
+restart the affected services.
 
-## Security and operational boundaries
+### 6. Try chat and paper trading
 
-This is a single-owner local foundation. Every data request uses one API key;
-there is no multi-user isolation. The application database role owns Phase 1
-tables, so use separate migration and restricted runtime roles before a broader
-deployment. Future execution code must lock the portfolio row and atomically
-update cash, holdings, and order status; the schema alone does not enforce that
-cross-table accounting invariant. Order buy_price is the simulated execution
-price for both BUY and SELL; CLOSED means completed in this initial schema.
+Choose **Local only** and start with a portfolio check.
 
-Raw documents, metadata, and embeddings are stored in PostgreSQL. They are not
-application-encrypted, and embeddings are sensitive. Use full-disk encryption,
-encrypted backups, private filesystem permissions, and tested backup restores.
-Loopback HTTP/PostgreSQL connections are local; remote deployment requires TLS,
-network access controls, and proper authentication/rate limiting. Do not place
-this service or Ollama directly on the public internet.
+```text
+Check my virtual cash balance and paper holdings. Do not execute any trades.
+```
 
-Stop containers with docker compose --profile app down; this retains the
-database volume. Back up data before any destructive volume operations.
+Ask a question about your ingested financial records.
 
-References: [pgvector SQLAlchemy integration](https://github.com/pgvector/pgvector-python#sqlalchemy),
-[Ollama embedding API](https://docs.ollama.com/api/embed).
+```text
+Find my grocery transactions and cite the financial document chunks.
+```
 
-Phase 5 evaluation setup and metrics are documented in [README_Phase5.md](README_Phase5.md).
+To place a capped virtual order, send the following request.
 
-Phase 6 local chat and trading dashboard setup is documented in [README_Phase6_UI.md](README_Phase6_UI.md).
+```text
+Check AAPL's quote and my virtual cash. Buy 1 paper share only if its price
+and total cost are at most $500. Enforce max_buy_price=500 and
+max_notional=500. Report the confirmed order receipt.
+```
+
+Wait for a confirmed receipt. Open **Trading dashboard**, refresh the portfolio,
+and inspect its holdings and Order ledger. Click a ticker to view its chart and
+toggle SMA/RSI. Add approved symbols through Market watch.
+
+Market prices may be delayed. Quotes and orders include source timestamps, and
+unavailable or stale quotes can prevent fills. Check AI answers against tool
+observations and citations. Semantic search alone does not establish a complete
+statement total.
+
+## Everyday startup and shutdown
+
+After the first setup, start Docker Desktop and Ollama, then run the following
+from the repository root.
+
+```powershell
+docker compose --profile app up -d postgres api
+cd frontend
+npm run dev
+```
+
+Press Ctrl+C in the frontend terminal to stop it. From the repository root,
+stop the Compose services while keeping the database volume with the following.
+
+```powershell
+docker compose --profile app down
+```
+
+For the previously created laptop demo, start `finbrain-demo-db` and
+`finbrain-demo-api` using `docker start` instead of starting another backend on
+port 8000. Those containers have their own database and credentials. Their
+FinBrain key can differ from the root `.env` used by Compose.
+
+## Your own data and optional cloud models
+
+CSV files use `Date,Description,Amount,Category`, ISO dates and plain decimal
+amounts with up to two decimal places. Negative amounts represent expenses and
+positive amounts represent income or refunds. Notes are UTF-8 text files.
+
+Private files under `data/private/` are excluded from the backend image. To
+import a normalized `data/private/statement.csv`, mount that directory read-only
+for the import command, run from the repository root.
+
+```powershell
+docker compose --profile app run --rm --volume "${PWD}/data/private:/imports:ro" api python ingest_finance.py --csv /imports/statement.csv
+```
+
+Add `--notes /imports/notes.txt` for a text file in the same folder. File identity
+includes its absolute path and row location, so moving or reordering an input
+may create new chunks. Keep the project, personal records, credentials and
+backups outside cloud-sync folders. Git ignores do not prevent OneDrive
+synchronization. The [UI guide](README_Phase6_UI.md) also documents host Python
+execution.
+
+For optional cloud market reasoning, set the following in root `.env`, then
+recreate the API service with `docker compose --profile app up -d api`.
+
+```dotenv
+LLM_CLOUD_ENABLED=true
+LLM_CLOUD_PROVIDER=openai
+LLM_CLOUD_MODEL=<model available in your account>
+LLM_CLOUD_API_KEY=<your provider key>
+```
+
+Use `anthropic` with its corresponding model and key for Anthropic. Local Ollama
+remains required for private financial queries and embeddings. The
+[routing guide](README_Phase4.md) explains privacy controls and public context.
+
+## Tests and production build
+
+From `frontend/`, run the following checks.
+
+```powershell
+npm run typecheck
+npm run test:e2e
+npm run build
+```
+
+Browser tests use installed Edge on Windows. On Linux/macOS, install the test
+browser first using `npx playwright install chromium`.
+
+Run Python tests through the Docker image.
+
+```powershell
+docker compose --profile app run --rm api python -m pytest -q -p no:cacheprovider
+```
+
+Integration tests require `TEST_DATABASE_URL` pointing to an initialized,
+disposable PostgreSQL/pgvector database. Test fixtures write ledger data, so use
+an isolated database. Phase 7 validation passed 146 backend tests, 13 frontend
+checks and the production build.
+
+## Project map and guides
+
+| Location | Responsibility |
+| --- | --- |
+| `frontend/` | Next.js chat and trading dashboard |
+| `main.py`, `main_ui_bridge.py` | FastAPI routes, browser access and SSE |
+| `agent/` | Agent orchestration, tools and ledger valuation |
+| `llm/` | Local/cloud routing and model clients |
+| `mcp_servers/` | Financial search and market/trading tools |
+| `database.py`, `models.py` | PostgreSQL schema and sessions |
+| `ingest_finance.py` | CSV/notes import and local embeddings |
+| `market_history.py` | Validated daily OHLCV history |
+| `eval/`, `tests/` | Evaluation datasets and regression tests |
+
+- [MCP setup](README_Phase2_MCP.md)
+- [Agent behavior and request recovery](README_Phase3.md)
+- [Local/cloud routing](README_Phase4.md)
+- [Evaluation framework](README_Phase5.md)
+- [UI setup and host Python workflow](README_Phase6_UI.md)
+- [Advanced charts and analytics](README_AdvancedDashboard.md)
+
+Analytics drawdown follows realized capital at settled SELL fills. It assumes
+recorded orders explain cash movements and excludes open-position price changes.
+FinBrain uses one owner API key. Keep the services private and back up the
+PostgreSQL volume.
