@@ -1818,3 +1818,219 @@ td {
   font-size: 9px;
   color: #879572;
 }
+
+/* Phase 7 market charts and ledger analytics. */
+.ticker-button {
+  border: 0;
+  background: none;
+  padding: 4px 0;
+  font-weight: 600;
+  font-size: inherit;
+  color: #426849;
+  text-decoration: underline;
+  text-decoration-color: #b5c7a1;
+  text-underline-offset: 4px;
+}
+.analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px solid #e8ecdf;
+}
+.analytics-grid > div {
+  padding: 19px 22px;
+  border-right: 1px solid #e8ecdf;
+}
+.analytics-grid > div:last-child {
+  border-right: 0;
+}
+.analytics-grid span,
+.analytics-grid small {
+  display: block;
+  color: #7e8c71;
+  font-size: 10px;
+  line-height: 1.6;
+}
+.analytics-grid strong {
+  display: block;
+  font-size: 22px;
+  font-weight: 500;
+  margin: 13px 0;
+}
+.analytics-method {
+  padding: 0 22px 17px;
+  font-size: 10px;
+  line-height: 1.7;
+  color: #839173;
+}
+.chart-section {
+  scroll-margin-top: 15px;
+  margin-top: 27px;
+}
+.chart-selector {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 11px;
+  color: #738566;
+}
+.chart-selector select {
+  border: 1px solid #d8e2ca;
+  background: #fffefa;
+  padding: 8px 12px;
+  border-radius: 5px;
+  color: #385c3e;
+}
+.chart-selector > span {
+  font-size: 10px;
+  color: #8b977d;
+}
+.candle-panel {
+  margin-top: 14px;
+}
+.chart-currency {
+  font-size: 11px;
+  color: #839375;
+  font-weight: 400;
+}
+.chart-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 0 22px 13px;
+  flex-wrap: wrap;
+}
+.indicator-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 13px;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.indicator-toggle {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  font-size: 10px;
+  color: #6a805b;
+  cursor: pointer;
+}
+.indicator-toggle input {
+  accent-color: #557a51;
+}
+.indicator-swatch {
+  width: 13px;
+  height: 3px;
+  background: #b88c38;
+}
+.indicator-sma200 .indicator-swatch {
+  background: #6589b2;
+}
+.indicator-rsi .indicator-swatch {
+  background: #827599;
+}
+.range-switch {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid #e0e6d5;
+  border-radius: 5px;
+  background: #f2f5eb;
+}
+.range-switch button {
+  border: 0;
+  background: none;
+  padding: 5px 8px;
+  font-size: 9px;
+  color: #879677;
+  border-radius: 3px;
+}
+.range-switch button[aria-pressed="true"] {
+  color: #3e673c;
+  background: white;
+  box-shadow: 0 1px 3px #23451b12;
+}
+.candle-legend {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 6px 22px 14px;
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+  color: #7b8d6b;
+}
+.candle-legend b {
+  color: #456b42;
+  font-weight: 500;
+}
+.chart-canvas {
+  height: 440px;
+  width: 100%;
+}
+.chart-canvas.with-rsi {
+  height: 570px;
+}
+.chart-canvas[hidden] {
+  display: none;
+}
+.chart-pane-labels {
+  display: flex;
+  gap: 20px;
+  padding: 12px 22px;
+  font-size: 10px;
+  color: #859574;
+  border-top: 1px solid #e9eddf;
+}
+.chart-data-table > summary {
+  padding: 12px 22px;
+  font-size: 10px;
+  color: #6d865b;
+  border-top: 1px solid #e9eddf;
+}
+@media (max-width: 900px) {
+  .analytics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .analytics-grid > div {
+    border-bottom: 1px solid #e8ecdf;
+  }
+}
+@media (max-width: 680px) {
+  .analytics-grid > div {
+    padding: 15px;
+  }
+  .analytics-grid strong {
+    font-size: 20px;
+  }
+  .analytics-grid span,
+  .analytics-grid small {
+    font-size: 9px;
+  }
+  .chart-toolbar {
+    padding: 0 14px 12px;
+  }
+  .indicator-controls {
+    gap: 8px;
+  }
+  .candle-legend {
+    padding: 5px 14px 12px;
+    gap: 9px;
+    font-size: 9px;
+  }
+  .chart-canvas {
+    height: 360px;
+  }
+  .chart-canvas.with-rsi {
+    height: 490px;
+  }
+  .chart-selector > span {
+    line-height: 1.7;
+  }
+  .chart-pane-labels {
+    padding: 10px 14px;
+    gap: 12px;
+    font-size: 9px;
+  }
+}

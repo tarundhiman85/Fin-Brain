@@ -30,22 +30,29 @@ def portfolio_snapshot() -> dict:
             quantities, averages = {}, {}
             realized = Decimal("0")
             coverage = True
+            outcomes, net_cash_cost = [], Decimal("0")
             for order in orders:
+                notional = (order.shares * order.buy_price).quantize(CENT, rounding=ROUND_HALF_UP)
+                if order.execution_metadata and "settled_notional" in order.execution_metadata:
+                    notional = Decimal(order.execution_metadata["settled_notional"])
+                if not notional.is_finite() or notional <= 0:
+                    raise TradingError("Ledger contains an invalid settlement amount.")
                 held = quantities.get(order.ticker, Decimal("0"))
                 average = averages.get(order.ticker, Decimal("0"))
                 if order.order_type == "BUY":
+                    net_cash_cost += notional
                     averages[order.ticker] = (
                         (held * average + order.shares * order.buy_price) / (held + order.shares)
                     ).quantize(UNIT, rounding=ROUND_HALF_UP)
                     quantities[order.ticker] = held + order.shares
                 else:
+                    net_cash_cost -= notional
                     if order.shares > held:
                         coverage = False
                         continue
-                    notional = (order.shares * order.buy_price).quantize(CENT, rounding=ROUND_HALF_UP)
-                    if order.execution_metadata and "settled_notional" in order.execution_metadata:
-                        notional = Decimal(order.execution_metadata["settled_notional"])
-                    realized += notional - (order.shares * average).quantize(CENT, rounding=ROUND_HALF_UP)
+                    profit = notional - (order.shares * average).quantize(CENT, rounding=ROUND_HALF_UP)
+                    realized += profit
+                    outcomes.append(profit)
                     quantities[order.ticker] = held - order.shares
             actual = {p.ticker: p.shares for p in positions}
             if any(quantities.get(ticker, 0) != actual.get(ticker, 0)
@@ -53,6 +60,28 @@ def portfolio_snapshot() -> dict:
                 coverage = False
             if any(p.shares > 0 and averages.get(p.ticker) != p.buy_price for p in positions):
                 coverage = False
+            initial_capital = portfolio.cash_balance + net_cash_cost
+            analytics_complete = coverage and initial_capital > 0
+            wins = sum(profit > 0 for profit in outcomes)
+            losses = sum(profit < 0 for profit in outcomes)
+            capital, peak, drawdown = initial_capital, initial_capital, Decimal("0")
+            if analytics_complete:
+                for profit in outcomes:
+                    capital += profit
+                    peak = max(peak, capital)
+                    drawdown = max(drawdown, (peak - capital) / peak)
+            analytics = {
+                "method": "realized_capital_average_cost",
+                "coverage_complete": analytics_complete,
+                "completed_exits": len(outcomes) if analytics_complete else None,
+                "wins": wins if analytics_complete else None,
+                "losses": losses if analytics_complete else None,
+                "breakeven": len(outcomes) - wins - losses if analytics_complete else None,
+                "win_loss_ratio": str((Decimal(wins) / losses).quantize(UNIT)) if analytics_complete and losses else None,
+                "win_rate_percent": str((Decimal(wins) * 100 / (wins + losses)).quantize(CENT)) if analytics_complete and wins + losses else None,
+                "max_drawdown_percent": str((drawdown * 100).quantize(CENT)) if analytics_complete and outcomes else None,
+                "initial_capital": str(initial_capital.quantize(CENT)) if analytics_complete else None,
+            }
             holdings = [
                 {"ticker": p.ticker, "shares": str(p.shares), "buy_price": str(p.buy_price),
                  "cost_basis": str((p.shares * p.buy_price).quantize(CENT, rounding=ROUND_HALF_UP))}
@@ -64,7 +93,7 @@ def portfolio_snapshot() -> dict:
                 "updated_at": portfolio.updated_at.isoformat(),
                 "snapshot_at": datetime.now(timezone.utc).isoformat(),
                 "holdings": holdings, "realized_pnl": str(realized) if coverage else None,
-                "ledger_coverage_complete": coverage,
+                "ledger_coverage_complete": coverage, "analytics": analytics,
             }
 
 

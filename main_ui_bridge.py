@@ -1,7 +1,7 @@
 """Local browser CORS, read-only dashboard data and durable checkpoint SSE."""
 import json
 from time import monotonic
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 import anyio
@@ -16,6 +16,7 @@ from agent.portfolio import get_portfolio_metrics
 from config import get_settings
 from database import get_engine
 from models import VirtualOrder, VirtualPortfolio
+from market_history import CandleHistory, fetch_candle_history
 from trading_service import TradingError, fetch_stock_quote, normalize_ticker
 
 router = APIRouter(prefix="/api/v1", tags=["browser interface"])
@@ -92,6 +93,24 @@ async def stock_quote(ticker: str):
     try:
         quote = await anyio.to_thread.run_sync(lambda: fetch_stock_quote(ticker), limiter=quote_limiter)
         return quote.model_dump(mode="json")
+    except TradingError as exc:
+        raise HTTPException(503, str(exc)) from None
+
+
+@router.get("/trading/quotes/{ticker}/history", response_model=CandleHistory)
+async def candle_history(ticker: str, period: Literal["1y", "2y"] = "2y"):
+    settings = get_settings()
+    if settings.llm_offline_mode:
+        raise HTTPException(403, "Market history is disabled by offline mode")
+    try:
+        ticker = normalize_ticker(ticker)
+    except TradingError as exc:
+        raise HTTPException(422, str(exc)) from None
+    if ticker not in settings.llm_public_tickers:
+        raise HTTPException(403, "Ticker is outside the configured public market scope")
+    try:
+        return await anyio.to_thread.run_sync(
+            lambda: fetch_candle_history(ticker, period), limiter=quote_limiter)
     except TradingError as exc:
         raise HTTPException(503, str(exc)) from None
 

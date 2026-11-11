@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowDownLeft,
   ArrowRight,
@@ -13,6 +13,8 @@ import {
   RefreshCw,
   Wallet,
 } from "lucide-react";
+import CandleChart from "@/components/CandleChart";
+import PortfolioAnalytics from "@/components/PortfolioAnalytics";
 import { useSession } from "@/components/SessionProvider";
 import {
   api,
@@ -101,7 +103,15 @@ function MetricCard({
     </article>
   );
 }
-function MarketCard({ ticker, apiKey }: { ticker: string; apiKey: string }) {
+function MarketCard({
+  ticker,
+  apiKey,
+  onSelect,
+}: {
+  ticker: string;
+  apiKey: string;
+  onSelect: (ticker: string) => void;
+}) {
   const { data, error, refreshing, refresh } = usePolling<Quote>(
     `/api/v1/market/quote/${encodeURIComponent(ticker)}`,
     apiKey,
@@ -115,7 +125,13 @@ function MarketCard({ ticker, apiKey }: { ticker: string; apiKey: string }) {
       <div className="market-card-top">
         <span className="ticker-mark">{ticker.slice(0, 1)}</span>
         <div>
-          <strong>{ticker}</strong>
+          <button
+            className="ticker-button"
+            aria-label={`View ${ticker} market chart`}
+            onClick={() => onSelect(ticker)}
+          >
+            {ticker}
+          </button>
           <small>Yahoo Finance</small>
         </div>
         <button
@@ -339,7 +355,31 @@ export default function TradingDashboard() {
   const [newTicker, setNewTicker] = useState("");
   const [watchError, setWatchError] = useState("");
   const data = portfolio.data;
-  function addTicker() {
+  const [selectedTicker, setSelectedTicker] = useState("AAPL");
+  const [addingTicker, setAddingTicker] = useState(false);
+  const chartSection = useRef<HTMLDivElement>(null);
+  const addition = useRef<AbortController | null>(null);
+  useEffect(() => {
+    return () => addition.current?.abort();
+  }, [session.key]);
+  function selectTicker(ticker: string) {
+    setSelectedTicker(ticker);
+    chartSection.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }
+  const chartSymbols = [
+    ...new Set([
+      ...watchlist,
+      ...(data?.holdings.map((holding) => holding.ticker) || []),
+      selectedTicker,
+    ]),
+  ].filter((ticker) => session.status?.public_tickers.includes(ticker));
+  const chartTicker = chartSymbols.includes(selectedTicker)
+    ? selectedTicker
+    : chartSymbols[0];
+  async function addTicker() {
     const symbol = newTicker.trim().toUpperCase();
     if (!session.status?.public_tickers.includes(symbol)) {
       setWatchError(
@@ -347,13 +387,48 @@ export default function TradingDashboard() {
       );
       return;
     }
-    if (watchlist.length >= 6) {
+    if (watchlist.includes(symbol)) {
+      setWatchError("This ticker is already on your watchlist.");
+      return;
+    }
+    if (
+      watchlist.filter((ticker) =>
+        session.status?.public_tickers.includes(ticker),
+      ).length >= 6
+    ) {
       setWatchError("The watchlist supports six tickers.");
       return;
     }
-    setWatchlist((items) => [...new Set([...items, symbol])]);
-    setNewTicker("");
+    if (addingTicker) return;
+    const controller = new AbortController();
+    addition.current = controller;
+    setAddingTicker(true);
     setWatchError("");
+    try {
+      const quote = await api<Quote>(
+        `/api/v1/market/quote/${encodeURIComponent(symbol)}`,
+        session.key,
+        { signal: controller.signal },
+      );
+      if (!controller.signal.aborted) {
+        if (quote.ticker !== symbol)
+          throw new Error("The quote returned a different ticker");
+        setWatchlist((items) => [
+          ...new Set([
+            ...items.filter((ticker) =>
+              session.status?.public_tickers.includes(ticker),
+            ),
+            symbol,
+          ]),
+        ]);
+        setSelectedTicker(symbol);
+        setNewTicker("");
+      }
+    } catch (cause) {
+      if (!controller.signal.aborted) setWatchError(errorMessage(cause));
+    } finally {
+      setAddingTicker(false);
+    }
   }
   return (
     <div className="dashboard-page">
@@ -459,6 +534,7 @@ export default function TradingDashboard() {
           Unknown metrics remain unavailable.
         </p>
       )}
+      {session.key && <PortfolioAnalytics analytics={data?.analytics} />}
       <section className="panel holdings-panel">
         <div className="panel-heading">
           <div>
@@ -492,7 +568,18 @@ export default function TradingDashboard() {
                         <span className="asset-icon">
                           {holding.ticker.slice(0, 1)}
                         </span>
-                        <strong>{holding.ticker}</strong>
+                        <button
+                          className="ticker-button"
+                          aria-label={`View ${holding.ticker} position chart`}
+                          disabled={
+                            !session.status?.public_tickers.includes(
+                              holding.ticker,
+                            )
+                          }
+                          onClick={() => selectTicker(holding.ticker)}
+                        >
+                          {holding.ticker}
+                        </button>
                       </div>
                     </td>
                     <td>{quantity(holding.shares)}</td>
@@ -560,6 +647,39 @@ export default function TradingDashboard() {
           </Link>
         </div>
       </section>
+      {session.key && (
+        <div ref={chartSection} className="chart-section">
+          <div className="chart-selector">
+            <label htmlFor="chart-ticker">Chart ticker</label>
+            <select
+              id="chart-ticker"
+              value={chartTicker || ""}
+              onChange={(event) => setSelectedTicker(event.target.value)}
+              disabled={!chartSymbols.length}
+            >
+              {!chartSymbols.length && (
+                <option value="">No approved symbols</option>
+              )}
+              {chartSymbols.map((ticker) => (
+                <option key={ticker} value={ticker}>
+                  {ticker}
+                </option>
+              ))}
+            </select>
+            <span>
+              Choose an asset or select its symbol from a position or market
+              card.
+            </span>
+          </div>
+          {chartTicker && (
+            <CandleChart
+              ticker={chartTicker}
+              apiKey={session.key}
+              offline={session.status?.offline_mode}
+            />
+          )}
+        </div>
+      )}
       <section className="market-section">
         <div className="panel-heading">
           <div>
@@ -571,7 +691,7 @@ export default function TradingDashboard() {
               className="watch-form"
               onSubmit={(event) => {
                 event.preventDefault();
-                addTicker();
+                void addTicker();
               }}
             >
               <label className="sr-only" htmlFor="ticker">
@@ -579,13 +699,18 @@ export default function TradingDashboard() {
               </label>
               <input
                 id="ticker"
+                disabled={addingTicker}
                 placeholder="Add ticker"
                 maxLength={20}
                 value={newTicker}
                 onChange={(event) => setNewTicker(event.target.value)}
               />
-              <button type="submit" className="secondary-button">
-                Add
+              <button
+                type="submit"
+                className="secondary-button"
+                disabled={addingTicker || !newTicker.trim()}
+              >
+                {addingTicker ? "Checking…" : "Add"}
               </button>
             </form>
           )}
@@ -606,13 +731,24 @@ export default function TradingDashboard() {
           </div>
         ) : (
           <div className="market-grid">
+            {!watchlist.filter((ticker) =>
+              session.status?.public_tickers.includes(ticker),
+            ).length && (
+              <p className="muted">
+                Your watchlist is empty. Add an approved ticker above.
+              </p>
+            )}
             {watchlist
               .filter((ticker) =>
                 session.status?.public_tickers.includes(ticker),
               )
               .map((ticker) => (
                 <div key={ticker} className="watch-item">
-                  <MarketCard ticker={ticker} apiKey={session.key} />
+                  <MarketCard
+                    ticker={ticker}
+                    apiKey={session.key}
+                    onSelect={selectTicker}
+                  />
                   <button
                     className="remove-watch"
                     aria-label={`Remove ${ticker} from watchlist`}

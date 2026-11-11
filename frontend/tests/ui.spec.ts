@@ -79,7 +79,7 @@ async function mockApi(page: Page, chat?: (route: Route) => Promise<void>) {
         offline_mode: false,
         cloud_enabled: false,
         cloud_configured: false,
-        public_tickers: ["AAPL", "MSFT", "NVDA"],
+        public_tickers: ["AAPL", "MSFT", "NVDA", "TSLA", "JPM"],
         default_mode: "auto",
       });
     if (path.endsWith("/agent/chat")) {
@@ -105,6 +105,18 @@ async function mockApi(page: Page, chat?: (route: Route) => Promise<void>) {
         holdings_cost_basis: "10000.00",
         market_value: "11000.00",
         ledger_coverage_complete: true,
+        analytics: {
+          method: "realized_capital_average_cost",
+          coverage_complete: true,
+          wins: 2,
+          losses: 1,
+          breakeven: 0,
+          completed_exits: 3,
+          win_loss_ratio: "2.00000000",
+          win_rate_percent: "66.67",
+          max_drawdown_percent: "1.96",
+          initial_capital: "100000.00",
+        },
         valuation_complete: true,
         snapshot_at: instant,
         updated_at: instant,
@@ -142,6 +154,31 @@ async function mockApi(page: Page, chat?: (route: Route) => Promise<void>) {
           },
         ],
       });
+    if (path.endsWith("/history")) {
+      const candles = Array.from({ length: 450 }, (_, index) => {
+        const date = new Date(Date.UTC(2024, 0, 1 + index));
+        const close = 100 + index * 0.15 + Math.sin(index / 4) * 3;
+        return {
+          time: date.toISOString().slice(0, 10),
+          open: close - 0.5,
+          high: close + 1,
+          low: close - 1,
+          close,
+          volume: 100000 + index * 100,
+        };
+      });
+      return fulfill(route, {
+        ticker: path.split("/").at(-2),
+        currency: "USD",
+        period: "2y",
+        interval: "1d",
+        source: "yahoo_finance",
+        adjustment: "provider_ohlc_auto_adjust_false",
+        fetched_at: instant,
+        dropped_rows: 0,
+        candles,
+      });
+    }
     if (path.includes("/market/quote/"))
       return fulfill(route, {
         ticker: path.split("/").at(-1),
@@ -338,4 +375,131 @@ test("financial formatting preserves large cents and tiny decimal values", async
     page.locator(".metric-card").nth(2).getByText("$0.00", { exact: true }),
   ).toBeVisible();
   await expect(page.getByText("−$1.01", { exact: true })).toBeVisible();
+});
+
+test("candles, indicator panes, ticker selection and verified watchlist additions", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await mockApi(page);
+  await connect(page);
+  await page.getByRole("link", { name: "Trading dashboard" }).click();
+  await expect(
+    page
+      .getByRole("region", { name: "AAPL historical chart" })
+      .locator("canvas")
+      .first(),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("region", { name: "Paper trade analytics" })
+      .getByText("2 : 1", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("1.96%", { exact: true })).toBeVisible();
+  await page.getByLabel("SMA 200", { exact: true }).check();
+  await page.getByLabel("RSI 14", { exact: true }).check();
+  await expect(
+    page.getByText("RSI 14 · Wilder · 30 / 70", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "3MO", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "3MO", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await page.getByLabel("RSI 14", { exact: true }).uncheck();
+  await page.getByLabel("RSI 14", { exact: true }).check();
+  await page.getByRole("button", { name: "View MSFT market chart" }).click();
+  await expect(
+    page
+      .getByRole("region", { name: "MSFT historical chart" })
+      .locator("canvas")
+      .first(),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "View AAPL position chart" }).click();
+  await expect(page.getByLabel("Chart ticker", { exact: true })).toHaveValue(
+    "AAPL",
+  );
+  await page.getByLabel("Add ticker", { exact: true }).fill("tsla");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "View TSLA market chart" }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Chart ticker", { exact: true })).toHaveValue(
+    "TSLA",
+  );
+  await page
+    .getByRole("button", { name: "Remove TSLA from watchlist" })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "View TSLA market chart" }),
+  ).toHaveCount(0);
+  await page.screenshot({
+    path: "test-results/advanced-dashboard.png",
+    fullPage: true,
+  });
+  expect(errors).toEqual([]);
+});
+
+test("watchlist rejects provider failures and history policy errors stay visible", async ({
+  page,
+}) => {
+  await mockApi(page);
+  await page.route("http://127.0.0.1:8000/api/v1/market/quote/TSLA", (route) =>
+    fulfill(route, { detail: "Quote unavailable" }, 503),
+  );
+  await page.route(
+    "http://127.0.0.1:8000/api/v1/trading/quotes/AAPL/history**",
+    (route) => fulfill(route, { detail: "History unavailable" }, 503),
+  );
+  await connect(page);
+  await page.getByRole("link", { name: "Trading dashboard" }).click();
+  await expect(
+    page.getByText("History unavailable", { exact: true }).first(),
+  ).toBeVisible();
+  await page.getByLabel("Add ticker", { exact: true }).fill("TSLA");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(
+    page.getByRole("alert").filter({ hasText: "Quote unavailable" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "View TSLA market chart" }),
+  ).toHaveCount(0);
+  await page.getByLabel("Add ticker", { exact: true }).fill("PRIVATE");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(
+    page.getByText(
+      "Choose a ticker enabled in your backend’s public market scope.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+});
+
+test("offline dashboards do not request quote or candle data", async ({
+  page,
+}) => {
+  const marketRequests: string[] = [];
+  page.on("request", (request) => {
+    if (
+      request.url().includes("/history") ||
+      request.url().includes("/market/quote/")
+    )
+      marketRequests.push(request.url());
+  });
+  await mockApi(page);
+  await page.route("http://127.0.0.1:8000/api/v1/llm/status", (route) =>
+    fulfill(route, {
+      offline_mode: true,
+      cloud_enabled: false,
+      cloud_configured: false,
+      public_tickers: ["AAPL", "MSFT"],
+      default_mode: "local_only",
+    }),
+  );
+  await connect(page);
+  await page.getByRole("link", { name: "Trading dashboard" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Market history is offline" }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Add ticker", { exact: true })).toHaveCount(0);
+  expect(marketRequests).toEqual([]);
 });

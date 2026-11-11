@@ -261,3 +261,5 @@ with mocked market/model calls. The production npm dependency audit reported
 zero known vulnerabilities.
 Native browser automation could not start in the Windows sandbox, so browser
 verification used headless Edge through Playwright.
+
+Advanced charts, technical indicators and realized-trade analytics are documented in [README_AdvancedDashboard.md](README_AdvancedDashboard.md).

@@ -74,6 +74,37 @@ export interface Holding {
   quote_stale: boolean | null;
   quote_error: string | null;
 }
+export interface PortfolioAnalytics {
+  method: string;
+  coverage_complete: boolean;
+  completed_exits: number | null;
+  wins: number | null;
+  losses: number | null;
+  breakeven: number | null;
+  win_loss_ratio: string | null;
+  win_rate_percent: string | null;
+  max_drawdown_percent: string | null;
+  initial_capital: string | null;
+}
+export interface Candle {
+  time: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+export interface CandleHistory {
+  ticker: string;
+  currency: string;
+  period: string;
+  interval: string;
+  source: string;
+  adjustment: string;
+  fetched_at: string;
+  dropped_rows: number;
+  candles: Candle[];
+}
 export interface Portfolio {
   id: number;
   currency: string;
@@ -85,6 +116,7 @@ export interface Portfolio {
   holdings_cost_basis: string;
   market_value: string | null;
   holdings: Holding[];
+  analytics?: PortfolioAnalytics;
   ledger_coverage_complete: boolean;
   valuation_complete: boolean;
   snapshot_at: string;
